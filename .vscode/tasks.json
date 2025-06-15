@@ -1,0 +1,53 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Flutter: Run Web",
+			"type": "shell",
+			"command": "export PATH=\"/opt/flutter/bin:$PATH\" && flutter run -d chrome --web-port=8080",
+			"group": "build",
+			"isBackground": true,
+			"problemMatcher": [
+				"$dart-analyze"
+			],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared",
+				"showReuseMessage": true,
+				"clear": true
+			}
+		},
+		{
+			"label": "Flutter: Build Web",
+			"type": "shell",
+			"command": "export PATH=\"/opt/flutter/bin:$PATH\" && flutter build web",
+			"group": "build",
+			"problemMatcher": [
+				"$dart-analyze"
+			]
+		},
+		{
+			"label": "Flutter: Clean",
+			"type": "shell",
+			"command": "export PATH=\"/opt/flutter/bin:$PATH\" && flutter clean",
+			"group": "build"
+		},
+		{
+			"label": "Flutter: Pub Get",
+			"type": "shell",
+			"command": "export PATH=\"/opt/flutter/bin:$PATH\" && flutter pub get",
+			"group": "build"
+		},
+		{
+			"label": "Flutter: Analyze",
+			"type": "shell",
+			"command": "export PATH=\"/opt/flutter/bin:$PATH\" && flutter analyze",
+			"group": "test",
+			"problemMatcher": [
+				"$dart-analyze"
+			]
+		}
+	]
+}
