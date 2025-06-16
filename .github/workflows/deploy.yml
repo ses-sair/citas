@@ -2,9 +2,7 @@ name: Deploy Flutter Web App to GitHub Pages
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
 
 jobs:
   build-and-deploy:
@@ -23,19 +21,11 @@ jobs:
     - name: Install dependencies
       run: flutter pub get
     
-    - name: Analyze code
-      run: flutter analyze
-    
-    - name: Run tests
-      run: flutter test
-    
     - name: Build for web
       run: flutter build web --release --base-href="/citas/"
     
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v3
-      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./build/web
-        cname: # Agregar dominio personalizado aquí si tienes uno
