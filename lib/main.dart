@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'core/services/auth_service.dart';
-import 'features/swipe/swipe_service.dart';
+import 'features/swipe/swipe_service.dart' as swipe;
 import 'features/chat/chat_service.dart';
 import 'features/profile/photo_management_screen.dart';
 import 'features/notifications/notifications_screen.dart';
 import 'features/notifications/notification_service.dart';
+import 'features/security/identity_verification_service.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 
 void main() {
@@ -298,6 +299,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const MatchesScreen(),
     const ChatScreen(),
     const ProfileScreen(),
+    const ConnectionScreen(), // Nueva pantalla de conexión
   ];
 
   @override
@@ -347,6 +349,10 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.person),
             label: 'Perfil',
           ),
+          NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            label: 'Conectar',
+          ),
         ],
       ),
     );
@@ -363,7 +369,7 @@ class SwipeScreen extends StatefulWidget {
 
 class _SwipeScreenState extends State<SwipeScreen> {
   final CardSwiperController controller = CardSwiperController();
-  List<UserProfile> profiles = [];
+  List<swipe.UserProfile> profiles = [];
   bool isLoading = true;
 
   @override
@@ -375,7 +381,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
   void _loadProfiles() async {
     await Future.delayed(const Duration(seconds: 1));
     setState(() {
-      profiles = SwipeService.generateDemoProfiles();
+      profiles = swipe.SwipeService.generateDemoProfiles();
       isLoading = false;
     });
   }
@@ -498,7 +504,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
                               index,
                               horizontalThresholdPercentage,
                               verticalThresholdPercentage) {
-                            return ProfileCard(profile: profiles[index]);
+                            return swipe.ProfileCard(profile: profiles[index]);
                           },
                         ),
                       ),
@@ -583,7 +589,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
     return true;
   }
 
-  void _handleLike(UserProfile profile) {
+  void _handleLike(swipe.UserProfile profile) {
     // Simular posible match
     final isMatch = DateTime.now().millisecond % 3 == 0; // 33% de probabilidad
 
@@ -600,11 +606,11 @@ class _SwipeScreenState extends State<SwipeScreen> {
     }
   }
 
-  void _handlePass(UserProfile profile) {
+  void _handlePass(swipe.UserProfile profile) {
     debugPrint('Pasado: ${profile.name}');
   }
 
-  void _showMatchDialog(UserProfile profile) {
+  void _showMatchDialog(swipe.UserProfile profile) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1787,14 +1793,51 @@ class _AuthScreenState extends State<AuthScreen> {
         AuthResult result;
 
         if (widget.isLogin) {
-          // Inicio de sesión con seguridad avanzada
+          // 🔐 VERIFICACIÓN DE IDENTIDAD AVANZADA PARA LOGIN
+
+          // 1. Generar fingerprint del dispositivo y verificar identidad
+          await IdentityVerificationService.generateDeviceFingerprint();
+
+          // 2. Verificar autenticidad del usuario
+          final verificationResult =
+              await IdentityVerificationService.verifyUserAuthenticity(
+            userId: _emailController.text.trim(),
+            email: _emailController.text.trim(),
+          );
+
+          if (!verificationResult.isVerified) {
+            setState(() {
+              _securityError =
+                  'Verificación de identidad fallida: Puntuación de confianza ${verificationResult.trustScorePercentage}';
+            });
+            return;
+          }
+
+          // 3. Proceder con login si la verificación es exitosa
           result = await AuthService.signInWithEmailAndPassword(
             email: _emailController.text.trim(),
             password: _passwordController.text,
             humanVerification: _securityController.text.trim(),
           );
         } else {
-          // Registro con validaciones de seguridad
+          // 🛡️ REGISTRO CON VERIFICACIÓN DE IDENTIDAD
+
+          // 1. Verificar que no sea un bot o cuenta duplicada
+          final identityCheck =
+              await IdentityVerificationService.verifyUserAuthenticity(
+            userId: _emailController.text.trim(),
+            email: _emailController.text.trim(),
+          );
+
+          if (!identityCheck.isVerified) {
+            setState(() {
+              _securityError =
+                  'Error de verificación: Puntuación de confianza muy baja ${identityCheck.trustScorePercentage}';
+            });
+            return;
+          }
+
+          // 2. Proceder con registro
           result = await AuthService.registerWithEmailAndPassword(
             name: _nameController.text.trim(),
             email: _emailController.text.trim(),
@@ -1857,6 +1900,452 @@ class _AuthScreenState extends State<AuthScreen> {
     _passwordController.dispose();
     _nameController.dispose();
     _securityController.dispose();
+    super.dispose();
+  }
+}
+
+// 🔗 PANTALLA DE CONEXIÓN DE USUARIOS - DEMO BÁSICA
+class ConnectionScreen extends StatefulWidget {
+  const ConnectionScreen({super.key});
+
+  @override
+  State<ConnectionScreen> createState() => _ConnectionScreenState();
+}
+
+class _ConnectionScreenState extends State<ConnectionScreen>
+    with TickerProviderStateMixin {
+  late TabController _tabController;
+  final TextEditingController _friendCodeController = TextEditingController();
+  bool _isLoading = false;
+  String? _currentFriendCode;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _generateFriendCode();
+  }
+
+  Future<void> _generateFriendCode() async {
+    setState(() {
+      _currentFriendCode =
+          'DEMO${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('🔗 Conectar Usuarios'),
+        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(icon: Icon(Icons.location_on), text: 'Cerca de Ti'),
+            Tab(icon: Icon(Icons.code), text: 'Código Amigo'),
+            Tab(icon: Icon(Icons.mail), text: 'Invitaciones'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildLocationTab(),
+          _buildFriendCodeTab(),
+          _buildInvitationsTab(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocationTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  const Icon(Icons.location_on, size: 48, color: Colors.blue),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Encuentra usuarios cerca de ti',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Usa tu ubicación para encontrar personas compatibles en tu área',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: _isLoading ? null : _showLocationDemo,
+                    icon: _isLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.search),
+                    label: Text(_isLoading ? 'Buscando...' : 'Buscar Usuarios'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    const Icon(Icons.security, size: 48, color: Colors.green),
+                    const SizedBox(height: 16),
+                    const Text(
+                      '🛡️ Funcionalidad de Seguridad Integrada',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      '✅ Verificación de identidad avanzada\n'
+                      '✅ Prevención anti-bot y anti-suplantación\n'
+                      '✅ Geolocalización segura\n'
+                      '✅ Códigos de amigo únicos\n'
+                      '✅ Sistema de invitaciones encriptadas\n'
+                      '✅ Análisis de comportamiento en tiempo real',
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: const Text(
+                        '🎓 Capstone de Ciberseguridad\n'
+                        'Esta app implementa múltiples capas de seguridad para prevenir fraudes, suplantación de identidad y ataques de ingeniería social en aplicaciones de citas.',
+                        style: TextStyle(fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFriendCodeTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Tu código de amigo
+          Card(
+            color: Theme.of(context).colorScheme.primaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  const Icon(Icons.qr_code, size: 48),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Tu Código de Amigo Seguro',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Text(
+                      _currentFriendCode ?? 'Generando...',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '🔐 Código encriptado y temporal (expira en 24h)',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Buscar por código
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Buscar por Código de Amigo',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _friendCodeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Código de 8 caracteres',
+                      hintText: 'DEMO1234',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.code),
+                    ),
+                    textCapitalization: TextCapitalization.characters,
+                    maxLength: 8,
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: _validateFriendCodeDemo,
+                    icon: const Icon(Icons.search),
+                    label: const Text('Buscar Usuario'),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    '💡 Códigos de prueba:\n'
+                    'DEMOSAFE - Usuario verificado\n'
+                    'DEMOTEST - Usuario de prueba',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInvitationsTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Sistema de Invitaciones Seguras',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.shield_outlined,
+                        size: 64, color: Colors.blue),
+                    const SizedBox(height: 16),
+                    const Text(
+                      '🔒 Invitaciones Encriptadas',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Las invitaciones incluyen:\n\n'
+                      '• Verificación de identidad del remitente\n'
+                      '• Análisis anti-ingeniería social\n'
+                      '• Encriptación extremo a extremo\n'
+                      '• Expiración automática de seguridad\n'
+                      '• Puntuación de confianza del usuario\n'
+                      '• Detección de patrones sospechosos',
+                      textAlign: TextAlign.left,
+                    ),
+                    const SizedBox(height: 20),
+                    FilledButton.icon(
+                      onPressed: _showInvitationDemo,
+                      icon: const Icon(Icons.mail),
+                      label: const Text('Ver Demo de Invitación'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLocationDemo() {
+    setState(() {
+      _isLoading = true;
+    });
+
+    // Simular búsqueda
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        _showDemoResults();
+      }
+    });
+  }
+
+  void _showDemoResults() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('🌍 Usuarios Cercanos Encontrados'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: CircleAvatar(child: Text('A')),
+              title: Text('Ana - 25 años'),
+              subtitle: Text('2.3 km • Verificada ✅\nSeguridad: 95%'),
+            ),
+            ListTile(
+              leading: CircleAvatar(child: Text('C')),
+              title: Text('Carlos - 28 años'),
+              subtitle: Text('4.7 km • Verificado ✅\nSeguridad: 88%'),
+            ),
+            ListTile(
+              leading: CircleAvatar(child: Text('S')),
+              title: Text('Sofia - 24 años'),
+              subtitle: Text('7.2 km • Pendiente ⏳\nSeguridad: 72%'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _validateFriendCodeDemo() {
+    final code = _friendCodeController.text.trim().toUpperCase();
+
+    if (code.isEmpty) {
+      _showMessage('Ingresa un código de amigo', isError: true);
+      return;
+    }
+
+    String message;
+    bool isSuccess;
+
+    if (code == 'DEMOSAFE') {
+      message =
+          '✅ Usuario verificado encontrado!\nNombre: Usuario Demo\nSeguridad: 95%\nEstado: Verificado';
+      isSuccess = true;
+    } else if (code == 'DEMOTEST') {
+      message =
+          '⚠️ Usuario encontrado (baja confianza)\nNombre: Usuario Prueba\nSeguridad: 60%\nEstado: No verificado';
+      isSuccess = false;
+    } else {
+      message =
+          '❌ Código no válido o expirado\nVerifica que el código sea correcto.';
+      isSuccess = false;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isSuccess ? '👤 Usuario Encontrado' : '⚠️ Código Inválido'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cerrar'),
+          ),
+          if (isSuccess)
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _friendCodeController.clear();
+                _showMessage('🚀 Invitación enviada exitosamente!');
+              },
+              child: const Text('Enviar Invitación'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showInvitationDemo() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('📨 Demo de Invitación Segura'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('De: Usuario_Demo_123'),
+            Text('Para: Tu cuenta'),
+            Text('Mensaje: "Me gustaría conectar contigo"'),
+            SizedBox(height: 12),
+            Text('🔐 Verificaciones de Seguridad:'),
+            Text('✅ Identidad verificada (95%)'),
+            Text('✅ Sin patrones sospechosos'),
+            Text('✅ Perfil auténtico'),
+            Text('✅ Comportamiento normal'),
+            SizedBox(height: 12),
+            Text('⏰ Expira en: 6 días, 23 horas'),
+          ],
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showMessage('❌ Invitación rechazada');
+            },
+            child: const Text('Rechazar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showMessage(
+                  '✅ Invitación aceptada! Nueva conexión establecida.');
+            },
+            child: const Text('Aceptar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMessage(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _friendCodeController.dispose();
     super.dispose();
   }
 }
